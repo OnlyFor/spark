@@ -101,8 +101,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("collate function syntax") {
     assert(sql(s"select collate('aaa', 'utf8_binary')").schema(0).dataType ==
       StringType("UTF8_BINARY"))
+    assert(sql(s"select collate('aaa', 'utf8_binary_rtrim')").schema(0).dataType ==
+      StringType("UTF8_BINARY_RTRIM"))
     assert(sql(s"select collate('aaa', 'utf8_lcase')").schema(0).dataType ==
       StringType("UTF8_LCASE"))
+    assert(sql(s"select collate('aaa', 'utf8_lcase_rtrim')").schema(0).dataType ==
+      StringType("UTF8_LCASE_RTRIM"))
   }
 
   test("collate function syntax with default collation set") {
@@ -260,14 +264,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     Seq(
       ("utf8_binary", "aaa", "AAA", false),
       ("utf8_binary", "aaa", "aaa", true),
+      ("utf8_binary_rtrim", "aaa", "AAA", false),
+      ("utf8_binary_rtrim", "aaa", "aaa  ", true),
       ("utf8_lcase", "aaa", "aaa", true),
       ("utf8_lcase", "aaa", "AAA", true),
       ("utf8_lcase", "aaa", "bbb", false),
+      ("utf8_lcase_rtrim", "aaa", "AAA  ", true),
+      ("utf8_lcase_rtrim", "aaa", "bbb", false),
       ("unicode", "aaa", "aaa", true),
       ("unicode", "aaa", "AAA", false),
+      ("unicode_rtrim", "aaa  ", "aaa ", true),
+      ("unicode_rtrim", "aaa", "AAA", false),
       ("unicode_CI", "aaa", "aaa", true),
       ("unicode_CI", "aaa", "AAA", true),
-      ("unicode_CI", "aaa", "bbb", false)
+      ("unicode_CI", "aaa", "bbb", false),
+      ("unicode_CI_rtrim", "aaa", "aaa", true),
+      ("unicode_CI_rtrim", "aaa ", "AAA  ", true),
+      ("unicode_CI_rtrim", "aaa", "bbb", false)
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
@@ -284,15 +297,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       ("utf8_binary", "AAA", "aaa", true),
       ("utf8_binary", "aaa", "aaa", false),
       ("utf8_binary", "aaa", "BBB", false),
+      ("utf8_binary_rtrim", "aaa ", "aaa  ", false),
       ("utf8_lcase", "aaa", "aaa", false),
       ("utf8_lcase", "AAA", "aaa", false),
       ("utf8_lcase", "aaa", "bbb", true),
+      ("utf8_lcase_rtrim", "AAA  ", "aaa", false),
       ("unicode", "aaa", "aaa", false),
       ("unicode", "aaa", "AAA", true),
       ("unicode", "aaa", "BBB", true),
+      ("unicode_rtrim", "aaa ", "aaa", false),
       ("unicode_CI", "aaa", "aaa", false),
       ("unicode_CI", "aaa", "AAA", false),
-      ("unicode_CI", "aaa", "bbb", true)
+      ("unicode_CI", "aaa", "bbb", true),
+      ("unicode_CI_rtrim", "aaa ", "aaa", false)
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
@@ -320,7 +337,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string collate $leftCollationName`, `string collate $rightCollationName`"
+          s""""STRING COLLATE $leftCollationName", "STRING COLLATE $rightCollationName""""
       )
     )
     // startsWith
@@ -334,7 +351,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string collate $leftCollationName`, `string collate $rightCollationName`"
+          s""""STRING COLLATE $leftCollationName", "STRING COLLATE $rightCollationName""""
       )
     )
     // endsWith
@@ -348,25 +365,29 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string collate $leftCollationName`, `string collate $rightCollationName`"
+          s""""STRING COLLATE $leftCollationName", "STRING COLLATE $rightCollationName""""
       )
     )
   }
 
   test("aggregates count respects collation") {
     Seq(
+      ("utf8_binary_rtrim", Seq("aaa", "aaa "), Seq(Row(2, "aaa"))),
       ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
       ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
       ("utf8_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("utf8_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
       ("utf8_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("utf8_lcase_rtrim", Seq("aaa", "AAA  "), Seq(Row(2, "aaa"))),
       ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
       ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_rtrim", Seq("aaa", "aaa "), Seq(Row(2, "aaa"))),
       ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
+      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_CI_rtrim", Seq("aaa", "AAA "), Seq(Row(2, "aaa")))
     ).foreach {
       case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
         checkAnswer(sql(
@@ -524,7 +545,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             s"WHERE c1 = SUBSTR(COLLATE('a', 'UNICODE'), 0)")
         },
         condition = "COLLATION_MISMATCH.IMPLICIT",
-        parameters = Map.empty
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE""""
+        )
       )
 
       // in operator
@@ -547,7 +570,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 || c2 FROM $tableName")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE""""
+        )
       )
 
 
@@ -562,7 +588,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 = c3")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE_CI""""
+        )
       )
 
       // different explicit collations are set
@@ -576,7 +605,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`, `string collate UNICODE`"
+          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
         )
       )
 
@@ -588,7 +617,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`, `string collate UNICODE`"
+          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
         )
       )
       checkError(
@@ -598,7 +627,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string collate UNICODE`, `string`"
+          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING""""
         )
       )
 
@@ -608,7 +637,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 || c3 = 'aa'")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE_CI""""
+        )
       )
 
       // concat on different implicit collations should succeed,
@@ -617,7 +649,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tableName ORDER BY c1 || c3")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE_CI""""
+        )
       )
 
       // concat + in
@@ -634,14 +669,20 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tableName WHERE contains(c1||c3, 'a')")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE_CI""""
+        )
       )
 
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI)")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT"
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
+        )
       )
 
       checkAnswer(sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)"),
@@ -674,7 +715,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string collate UTF8_LCASE`, `string collate UNICODE`"
+          s""""STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE""""
       )
     )
 
@@ -790,7 +831,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             exception = intercept[AnalysisException] {
               sql(s"CREATE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName")
             },
-            condition = "COLLATION_MISMATCH.IMPLICIT")
+            condition = "COLLATION_MISMATCH.IMPLICIT",
+            parameters = Map(
+              "implicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UTF8_LCASE""""
+            )
+          )
         }
       }
     }
@@ -1312,7 +1357,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     for (codeGen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
       val collationSetup = if (collation.isEmpty) "" else " COLLATE " + collation
       val supportsBinaryEquality = collation.isEmpty || collation == "UNICODE" ||
-        CollationFactory.fetchCollation(collation).supportsBinaryEquality
+        CollationFactory.fetchCollation(collation).isUtf8BinaryType
 
       test(s"Group by on map containing$collationSetup strings ($codeGen)") {
         val tableName = "t"
@@ -1537,7 +1582,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(collectFirst(queryPlan) {
             case b: HashJoin => b.leftKeys.head
           }.head.isInstanceOf[CollationKey])
@@ -1594,7 +1639,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(collectFirst(queryPlan) {
             case b: BroadcastHashJoinExec => b.leftKeys.head
           }.head.asInstanceOf[ArrayTransform].function.asInstanceOf[LambdaFunction].
@@ -1655,7 +1700,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(collectFirst(queryPlan) {
             case b: BroadcastHashJoinExec => b.leftKeys.head
           }.head.asInstanceOf[ArrayTransform].function.
@@ -1714,7 +1759,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(queryPlan.toString().contains("collationkey"))
         } else {
           assert(!queryPlan.toString().contains("collationkey"))
@@ -1773,7 +1818,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
 
         // Only if collation doesn't support binary equality, collation key should be injected.
-        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+        if (!CollationFactory.fetchCollation(t.collation).isUtf8BinaryType) {
           assert(queryPlan.toString().contains("collationkey"))
         } else {
           assert(!queryPlan.toString().contains("collationkey"))
